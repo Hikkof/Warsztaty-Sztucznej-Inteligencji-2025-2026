@@ -136,17 +136,7 @@ for split in split_types:
         plt.plot(test_average)
         plt.show()
         '''
-
         print(f"Najniższy wynik treningowy: {min(train_average)}")
         print(f"Najniższy wynik testowy: {min(test_average)}")
 
 print('?')
-
-# training loop, early stop zmiana loss mniej niż 1% względem ostatniej epoki\
-# porównywanie loss do ostatniej epoki i zmniejszanie lr\
-# jeśli average z kilku poprzednich epok wystarczająco blisko 0 też należy zmniejszyć lr
-
-# sprawdzanie neuronów żeby nie wygasały\
-# sprawdzanie gradientów
-
-# zapisanie modelu
