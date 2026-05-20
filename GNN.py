@@ -38,7 +38,6 @@ class GNN(nn.Module):
 
 
 def mol_to_graph(mol, target):
-    # --- Node features ---
     atom_features = []
     for atom in mol.GetAtoms():
         atom_features.append([
@@ -51,13 +50,11 @@ def mol_to_graph(mol, target):
         ])
     x = torch.tensor(atom_features, dtype=torch.float)
 
-    # --- Edge index + edge features ---
     edge_index = []
     for bond in mol.GetBonds():
         i = bond.GetBeginAtomIdx()
         j = bond.GetEndAtomIdx()
 
-        # Undirected graph → add both directions
         edge_index.append([i, j])
         edge_index.append([j, i])
 
@@ -80,7 +77,7 @@ class CustomDataset(InMemoryDataset, ABC):
         self.data, self.slices = self.collate(data_list)
 
 
-df_activity = pd.read_csv('activity.csv', index_col=False)
+df_activity = pd.read_csv('initial cleaning/activity.csv.csv', index_col=False)
 df_activity = df_activity[['canonical_smiles', 'standard_value']]
 
 df_activity['canonical_smiles'] = df_activity['canonical_smiles'].apply(Chem.MolFromSmiles)
