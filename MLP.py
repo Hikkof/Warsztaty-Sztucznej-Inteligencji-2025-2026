@@ -22,7 +22,7 @@ class MLP(nn.Module):
             nn.Linear(512, 128),
             nn.ReLU(),
             nn.Linear(128, 1),
-            nn.Dropout(0.1),
+            # nn.Dropout(0.1),
         )
 
     def forward(self, x):
@@ -32,76 +32,72 @@ class MLP(nn.Module):
 df_activity = pd.read_csv('activity.csv', index_col=False)
 df_activity = df_activity[['canonical_smiles', 'standard_value']]
 
-train, test, valid = funkcje.scaffold_split_df(df_activity)
-# train, test, valid = funkcje.random_split(df_activity)
+df_activity['canonical_smiles'] = df_activity['canonical_smiles'].apply(Chem.MolFromSmiles)
+df_activity['canonical_smiles'].dropna(inplace=True)  # rdkit wpisuje 'None' w niemożliwych cząsteczkach
 
-datasets = [train, test, valid]
+epochs = 10
+loss_functions = {'MSELoss': nn.MSELoss(), 'R2Score': R2Score()}
+split_types = {'Random': funkcje.random_split(df_activity), 'Scaffold': funkcje.scaffold_split_df(df_activity)}
 
-for dataset in datasets:
-    dataset['canonical_smiles'] = dataset['canonical_smiles'].apply(Chem.MolFromSmiles)
-    dataset['canonical_smiles'].dropna(inplace=True)  # rdkit wpisuje 'None' w niemożliwych cząsteczkach
-    dataset['canonical_smiles'] = dataset['canonical_smiles'].apply(funkcje.morgan_fp)
-    dataset['canonical_smiles'] = dataset['canonical_smiles'].apply(np.array)
+for split in split_types:
+    print(f"Rodzaj podziału: {split}")
+    train, test, valid = split_types[split]
 
-    print(dataset.info())
+    datasets = [train, test, valid]
+    for dataset in datasets:
+        dataset['canonical_smiles'] = dataset['canonical_smiles'].apply(funkcje.morgan_fp)
+        dataset['canonical_smiles'] = dataset['canonical_smiles'].apply(np.array)
 
-X_train, X_test, X_validate = train.drop('standard_value', axis=1), test.drop('standard_value', axis=1), valid.drop('standard_value', axis=1)
-y_train, y_test, y_validate = train['standard_value'], test['standard_value'], valid['standard_value']
+    X_train, X_test, X_validate = train.drop('standard_value', axis=1), test.drop('standard_value', axis=1), valid.drop(
+        'standard_value', axis=1)
+    y_train, y_test, y_validate = train['standard_value'], test['standard_value'], valid['standard_value']
 
-train_dataset = TensorDataset(torch.FloatTensor(np.array(X_train.values.tolist())), torch.FloatTensor(y_train.values))
-train_loader = DataLoader(train_dataset, batch_size=funkcje.BATCH_SIZE, shuffle=True)
+    train_dataset = TensorDataset(torch.FloatTensor(np.array(X_train.values.tolist())), torch.FloatTensor(y_train.values))
+    train_loader = DataLoader(train_dataset, batch_size=funkcje.BATCH_SIZE, shuffle=True)
 
-test_dataset = TensorDataset(torch.FloatTensor(np.array(X_test.values.tolist())), torch.FloatTensor(y_test.values))
-test_loader = DataLoader(test_dataset, batch_size=funkcje.BATCH_SIZE, shuffle=True)
+    test_dataset = TensorDataset(torch.FloatTensor(np.array(X_test.values.tolist())), torch.FloatTensor(y_test.values))
+    test_loader = DataLoader(test_dataset, batch_size=funkcje.BATCH_SIZE, shuffle=True)
 
-model = MLP()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
-#loss_function = nn.MSELoss()
-loss_function = R2Score()
+    for loss_function in loss_functions:
+        print(f"Funkcja straty: {loss_function}")
 
-train_losses = []
-test_losses = []
-mean_valid_losses = []
-epochs = 10  # 100  # zwykle im więcej parametrow tym wiecej epok
-# minimum average distace, mówi ile max epok
-# virtual node może pomóc żeby mocno oddalone neurony się o sobie dowiedziały
-# learnning rate inny na poczatek i potem
+        model = MLP()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
 
-for epoch in range(epochs):
-    model.train()
-    train_losses.append([])
-    test_losses.append([])
+        train_losses = []
+        test_losses = []
 
-    for batch_id, (inputs, targets) in enumerate(train_loader):
-        optimizer.zero_grad()
-        outputs = model(inputs).squeeze()
+        for epoch in range(epochs):
+            model.train()
+            train_losses.append([])
 
-        loss = loss_function(outputs, targets)
-        train_losses[epoch].append(loss.item())
+            for batch_id, (inputs, targets) in enumerate(train_loader):
+                optimizer.zero_grad()
+                outputs = model(inputs).squeeze()
 
-        loss.backward()
-        optimizer.step()
+                loss = loss_functions[loss_function](outputs, targets)
+                train_losses[epoch].append(loss.item())
 
-    for batch_id, (inputs, targets) in enumerate(test_loader):
-        outputs = model(inputs).squeeze()
-        loss = loss_function(outputs, targets)
-        test_losses[epoch].append(loss.item())
+                loss.backward()
+                optimizer.step()
 
-train_average = [sum(e) / len(e) for e in train_losses]
-test_average = [sum(e) / len(e) for e in test_losses]
+            model.eval()
+            test_losses.append([])
 
-plt.plot(train_average)
-plt.plot(test_average)
-plt.show()
+            with torch.no_grad():
+                for batch_id, (inputs, targets) in enumerate(train_loader):
+                    outputs = model(inputs).squeeze()
+                    loss = loss_functions[loss_function](outputs, targets)
+                    test_losses[epoch].append(loss.item())
 
-print(f"Best train score: {min(train_average)}")
-print(f"Best test score: {min(test_average)}")
+        train_average = [sum(e) / len(e) for e in train_losses]
+        test_average = [sum(e) / len(e) for e in test_losses]
+        '''
+        plt.plot(train_average)
+        plt.plot(test_average)
+        plt.show()
+        '''
+        print(f"Best train score: {min(train_average)}")
+        print(f"Best test score: {min(test_average)}")
+        
 print('?')
-# jedak PIC50
-# ogranizenie aktywosci po bialku
-# sprawdzanie wartosci neuronow, sprawdzanie czy nie umieraja
-# sprawdzanie gradientow czy nie wybuchaja ani nie wygasaja
-# early stop w zalezninosci od loss fuction
-# overfitting point? raczej nie wsytąpi
-# R2 ~0.68, RMSE ~0.8
-# hugging face: gemma?
