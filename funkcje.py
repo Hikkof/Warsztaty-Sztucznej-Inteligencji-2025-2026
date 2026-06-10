@@ -11,46 +11,39 @@ BATCH_SIZE = 32
 FP_SIZE = 2048
 RNG_SEED = 1234
 
+ATOMIC_SYMBOLS = ["H", "B", "C", "N", "O", "F", "Mg", "Si", "P", "S", "Cl", "Cu", "Zn", "Se", "Br", "Sn", "I"]
+ATOMIC_VOCAB = {a: i for i, a in enumerate(ATOMIC_SYMBOLS)}
+DEGREE_VOCAB = range(7)
+HYBRIDIZATION_VOCAB = [
+    Chem.rdchem.HybridizationType.SP,
+    Chem.rdchem.HybridizationType.SP2,
+    Chem.rdchem.HybridizationType.SP3,
+    Chem.rdchem.HybridizationType.SP3D,
+    Chem.rdchem.HybridizationType.SP3D2,
+    Chem.rdchem.HybridizationType.UNSPECIFIED
+]
+BOND_TYPE_VOCAB = [
+    Chem.rdchem.BondType.SINGLE,
+    Chem.rdchem.BondType.DOUBLE,
+    Chem.rdchem.BondType.TRIPLE,
+    Chem.rdchem.BondType.AROMATIC
+]
+STEREO_VOCAB = [
+    Chem.rdchem.BondStereo.STEREONONE,
+    Chem.rdchem.BondStereo.STEREOANY,
+    Chem.rdchem.BondStereo.STEREOZ,
+    Chem.rdchem.BondStereo.STEREOE,
+    Chem.rdchem.BondStereo.STEREOCIS,
+    Chem.rdchem.BondStereo.STEREOTRANS
+]
+
+def one_hot(x, vocab):
+    return [1 if x == val else 0 for val in vocab]
+
 
 def morgan_fp(mol):
     morgan = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=FP_SIZE)
     return morgan.GetFingerprint(mol)
-
-
-def get_edge_indices(mol):
-    edge_indices = []
-
-    for bond in mol.GetBonds():
-        i = bond.GetBeginAtomIdx()
-        j = bond.GetEndAtomIdx()
-        edge_indices.append([i, j])
-        edge_indices.append([j, i])
-
-    return torch.tensor(edge_indices, dtype=torch.long).t()
-
-'''
-def random_split(dataset, seed=RNG_SEED):
-    X = dataset.drop(['standard_value'], axis=1)
-    y = dataset['standard_value']
-
-    generator = torch.Generator().manual_seed(seed)
-    X_train, X_test, X_validate = \
-        torch.utils.data.random_split(X, [0.8, 0.1, 0.1], generator=generator)
-
-    generator = torch.Generator().manual_seed(seed)
-    y_train, y_test, y_validate = \
-        torch.utils.data.random_split(y, [0.8, 0.1, 0.1], generator=generator)
-
-    return X_train, X_test, X_validate, y_train, y_test, y_validate
-'''
-
-'''
-def random_split(dataset, frac_train=0.8, frac_valid=0.1, frac_test=0.1, seed=RNG_SEED):
-    generator = torch.Generator().manual_seed(seed)
-    train, test, valid = torch.utils.data.random_split(dataset, [frac_train, frac_valid, frac_test], generator=generator)
-
-    return train, test, valid
-'''
 
 
 def random_split(dataset, frac_train=0.8, frac_valid=0.1, frac_test=0.1, seed=RNG_SEED):
@@ -72,9 +65,9 @@ def compute_scaffold(mol):
     return Chem.MolToSmiles(scaf)
 
 
-def scaffold_split_df(df, smiles_col="canonical_smiles", frac_train=0.8, frac_valid=0.1, frac_test=0.1):
+def scaffold_split_df(df, mol_col='mol', frac_train=0.8, frac_valid=0.1):
     df_copy = df.copy()
-    df_copy["scaffold"] = df[smiles_col].apply(compute_scaffold)
+    df_copy["scaffold"] = df[mol_col].apply(compute_scaffold)
 
     scaffold_groups = (
         df_copy.groupby("scaffold")
